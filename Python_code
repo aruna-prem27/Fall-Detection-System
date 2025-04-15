@@ -1,0 +1,52 @@
+import streamlit as st
+import pandas as pd
+import plotly.express as px
+import numpy as np
+
+st.set_page_config(page_title="Fall Detection Dashboard", layout="wide")
+
+st.title("🧠 Fall Detection System Dashboard")
+st.markdown("Visualizing **Accelerometer**, **Gyroscope**, and **EOG** data for detecting falls.")
+
+# Load Data
+@st.cache_data
+def load_data():
+    return pd.read_csv("glasses.csv")
+
+df = load_data()
+
+# Check required columns
+required_cols = ['timestamp', 'acc_x', 'acc_y', 'acc_z', 'gyro_x', 'gyro_y', 'gyro_z', 'eog']
+if not all(col in df.columns for col in required_cols):
+    st.error(f"CSV must include: {', '.join(required_cols)}")
+    st.stop()
+
+# Sidebar Filter
+st.sidebar.header("Filter Range")
+start = st.sidebar.number_input("Start Index", 0, len(df)-1, 0)
+end = st.sidebar.number_input("End Index", start+1, len(df), min(len(df), start+200))
+df_view = df.iloc[start:end].copy()
+
+# Compute Acceleration Magnitude
+df_view["acc_mag"] = np.sqrt(df_view['acc_x']**2 + df_view['acc_y']**2 + df_view['acc_z']**2)
+
+# Fall detection logic
+st.sidebar.header("Fall Detection Settings")
+acc_threshold = st.sidebar.slider("Accel Magnitude Threshold", 0.0, 50.0, 20.0)
+eog_threshold = st.sidebar.slider("EOG Threshold", 0.0, 10.0, 5.0)
+df_view["fall_detected"] = (df_view["acc_mag"] > acc_threshold) & (df_view["eog"] > eog_threshold)
+
+# Plots
+st.subheader("📉 Accelerometer Data")
+st.plotly_chart(px.line(df_view, x="timestamp", y=["acc_x", "acc_y", "acc_z"], title="Accelerometer"))
+
+st.subheader("🔄 Gyroscope Data")
+st.plotly_chart(px.line(df_view, x="timestamp", y=["gyro_x", "gyro_y", "gyro_z"], title="Gyroscope"))
+
+st.subheader("👁️ EOG Signal")
+st.plotly_chart(px.line(df_view, x="timestamp", y="eog", title="EOG Signal"))
+
+st.subheader("🚨 Detected Falls")
+fall_events = df_view[df_view["fall_detected"]]
+st.write(f"Detected {len(fall_events)} potential fall events.")
+st.dataframe(fall_events[["timestamp", "acc_mag", "eog"]])
